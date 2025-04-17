@@ -53,7 +53,7 @@ def simple_movement_loop():
     
     # Initialize with positions
     coordinates = {
-        "guards": [(10, 9), (16, 3)],  # Blue guards
+        "guards": [(5, 9), (16, 3)],  # Blue guards
         "hero": [(5, 14)],             # Green hero
         "obstacles": [(0, 0), (19, 0)]  # Black obstacles in corners
     }

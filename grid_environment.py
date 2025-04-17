@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-def create_grid_matrix(n=8):
+def create_grid_matrix(n):
     # Initialize the grid with zeros (empty cells)
     grid = np.zeros((n, n), dtype=int)
     return grid
@@ -97,6 +97,8 @@ def plot_grid(grid_matrix, title="Main Grid", agent_indices=None):
     plt.tight_layout()
     return fig, ax
 
+
+# this is now redundant as we are maintaining the view without new subgrid class
 class AgentSubgrid:
     def __init__(self, parent_grid, position, size, agent_type, agent_num):
         self.parent_grid = parent_grid
