@@ -111,6 +111,7 @@ class GridWorldEnv(gym.Env):
         self.coordinates = None
         self.explored = None
         self.episode_steps = 0
+        self.reward = 0
         self.max_episode_steps = 1000
         self.goal_reached = False
 
@@ -123,6 +124,7 @@ class GridWorldEnv(gym.Env):
 
     def reset(self):
         self.episode_steps = 0
+        self.reward = 0
         self.goal_reached = False
         self.grid_matrix = create_grid_matrix(self.grid_size)
         self.explored = np.zeros((self.grid_size, self.grid_size), dtype=bool)
@@ -189,7 +191,7 @@ class GridWorldEnv(gym.Env):
 
     def step(self, action):
         self.episode_steps += 1
-        reward = -0.1  # Time penalty
+        self.reward  += -0.1  # Time penalty   
         done = False
         info = {}
 
@@ -202,7 +204,7 @@ class GridWorldEnv(gym.Env):
         
         # Check goal reached
         if new_pos == self.coordinates["goal"][0]:
-            reward += 10
+            self.reward += 100
             done = True
             self.goal_reached = True
         
@@ -211,7 +213,7 @@ class GridWorldEnv(gym.Env):
         
         # Check guard detection
         if self._check_detection(new_pos):
-            reward -= 10
+            self.reward -= 100
             done = True
         
         # Update grid state
@@ -220,7 +222,7 @@ class GridWorldEnv(gym.Env):
         # Update visualization
         self._update_all_views()
         
-        return self._get_observation(), reward, done, info
+        return self._get_observation(), self.reward, done, info
 
     def render(self, mode="human"):
         if mode == "human":
@@ -421,16 +423,17 @@ class GridWorldEnv(gym.Env):
 
 # Example usage
 if __name__ == "__main__":
-    env = GridWorldEnv(grid_size=10, obstacle_count=5)
+    env = GridWorldEnv(grid_size=10, obstacle_count=10)
     obs = env.reset()
     
     for _ in range(100):
         action = env.action_space.sample()
         obs, reward, done, info = env.step(action)
-        env.render()
+        # env.render() #why is the rendering not stopping when i comment this out?
         time.sleep(0.1)
         
         if done:
+            print(reward)
             obs = env.reset()
     
     env.close()
