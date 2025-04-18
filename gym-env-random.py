@@ -1,3 +1,5 @@
+#need to understand the matplotlib vizualization dynamic update and functions
+
 import numpy as np
 import gym 
 from gym import spaces
