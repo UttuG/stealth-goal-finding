@@ -87,11 +87,12 @@ class GridWorldEnv(gym.Env):
 
         self.grid_matrix = None
         self.coordinates = None
-        self.explored = None
+        self.explored = None #2-D array to track explored tiles
         self.episode_steps = 0
         self.reward = 0
         self.max_episode_steps = 1000
         self.goal_reached = False
+        self.explored_tiles = set() # Set to track explored tiles
 
         # Visualization
         self.main_fig = None
@@ -104,7 +105,8 @@ class GridWorldEnv(gym.Env):
         self.reward = 0
         self.goal_reached = False
         self.grid_matrix = create_grid_matrix(self.grid_size)
-        self.explored = np.zeros((self.grid_size, self.grid_size), dtype=bool)
+        self.explored = np.zeros((self.grid_size, self.grid_size), dtype=int)
+        self.explored_tiles = set()
         self.coordinates = {
             "guards": [],
             "heroes": [],
@@ -300,7 +302,8 @@ class GridWorldEnv(gym.Env):
                 y = pos[1] - self.hero_size//2 + j
                 if 0 <= x < self.grid_size and 0 <= y < self.grid_size:
                     if not self.explored[x, y]:
-                        self.explored[x, y] = True
+                        self.explored[x, y] = 1
+                        self.explored_tiles.add((x, y))
 
     def _check_detection(self, hero_pos):
         for guard_pos in self.coordinates["guards"]:
@@ -321,24 +324,29 @@ class GridWorldEnv(gym.Env):
 
     def _get_observation(self):
         hero_pos = self.coordinates["heroes"][0]
-        return extract_subgrid(self.grid_matrix, hero_pos, self.hero_size)
+        subgrid = extract_subgrid(self.grid_matrix, hero_pos, self.hero_size)
+        exploration_count = len(self.explored_tiles) / (self.grid_size ** 2) # Normalize exploration count to [0, 1] 
+
+        return [subgrid,np.array([exploration_count], dtype=np.float32), self.explored] #can modify this to include more information if needed
 
     def _move_guards(self):
-        for idx in range(len(self.coordinates["guards"])):
-            old_pos = self.coordinates["guards"][idx]
-            action = np.random.randint(4)
-            new_pos = self._move_agent(old_pos, action)
-            self.grid_matrix[old_pos] = 0
-            self.grid_matrix[new_pos] = 1
-            self.coordinates["guards"][idx] = new_pos
+        # for idx in range(len(self.coordinates["guards"])):
+        #     old_pos = self.coordinates["guards"][idx]
+        #     action = np.random.randint(4)
+        #     new_pos = self._move_agent(old_pos, action)
+        #     self.grid_matrix[old_pos] = 0
+        #     self.grid_matrix[new_pos] = 1
+        #     self.coordinates["guards"][idx] = new_pos
+        pass  # Placeholder for guard movement logic as training for static guards
+        # This can be implemented based on specific requirements.
 
 # --- Example usage ---
 
 if __name__ == "__main__":
     # For training without rendering:
-    env = GridWorldEnv(grid_size=10, obstacle_count=10)
+    # env = GridWorldEnv(grid_size=10, obstacle_count=40)
     # For visualization:
-    # env = GridWorldEnv(grid_size=10, obstacle_count=10, render_mode="human")
+    env = GridWorldEnv(grid_size=10, obstacle_count=10, render_mode="human")
     obs = env.reset()
     for _ in range(100):
         action = env.action_space.sample()
@@ -346,6 +354,6 @@ if __name__ == "__main__":
         # env.render #not required for vizualization now, only the render_mode parameter dictates the view
         time.sleep(0.1)
         if done:
-            print(reward)
+            # print(reward, obs[2])
             obs = env.reset()
     env.close()

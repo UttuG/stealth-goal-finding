@@ -1,27 +1,15 @@
-    """Update main grid visualization"""
-        self.main_ax.clear()
-        self.main_ax.set_xticks([])
-        self.main_ax.set_yticks([])
-        self.main_ax.set_title("Main Grid")
-        self.main_ax.set_xlim(0, self.grid_size)
-        self.main_ax.set_ylim(0, self.grid_size)
-        self.main_ax.set_aspect('equal', adjustable='box')
-
-        # Draw grid lines
-        for i in range(self.grid_size + 1):
-            self.main_ax.axhline(i, color='black', linewidth=0.5)
-            self.main_ax.axvline(i, color='black', linewidth=0.5)
-
-        # Draw all cells
-        for i in range(self.grid_size):
-            for j in range(self.grid_size):
-                value = self.grid_matrix[i, j]
-                color = 'white'
-                if value == 1: color = 'blue'
-                elif value == 2: color = 'green'
-                elif value == 3: color = 'black'
-                elif value == 4: color = 'yellow'
-                rect = Rectangle((j, i), 1, 1, facecolor=color, edgecolor='black', linewidth=0.5)
-                self.main_ax.add_patch(rect)
-
-        self.main_ax.figure.canvas.draw_idle()
+if __name__ == "__main__":
+    # For training without rendering:
+    env = GridWorldEnv(grid_size=10, obstacle_count=10)
+    # For visualization:
+    # env = GridWorldEnv(grid_size=10, obstacle_count=10, render_mode="human")
+    obs = env.reset()
+    for _ in range(100):
+        action = env.action_space.sample()
+        obs, reward, done, info = env.step(action)
+        # env.render #not required for vizualization now, only the render_mode parameter dictates the view
+        time.sleep(0.1)
+        if done:
+            print(reward)
+            obs = env.reset()
+    env.close()
