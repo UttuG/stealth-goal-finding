@@ -73,7 +73,7 @@ class GridWorldEnv(gym.Env):
         self.grid_size = grid_size
         self.hero_count = hero_count
         self.guard_count = guard_count
-        self.guard_size = guard_size
+        self.guard_size = guard_size #guard's observation grid size
         self.hero_size = hero_size
         self.obstacle_count = obstacle_count
         self.render_mode = render_mode
