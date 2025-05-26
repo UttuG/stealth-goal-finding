@@ -1,4 +1,4 @@
-#still need to understand the plotting and dynamic update
+###still need to understand the plotting and dynamic update
 
 import numpy as np
 import gym
@@ -79,11 +79,32 @@ class GridWorldEnv(gym.Env):
         self.render_mode = render_mode
 
         self.action_space = spaces.Discrete(4)  # 0:up, 1:right, 2:down, 3:left
+
+        low = np.concatenate([
+            np.zeros(self.hero_size * self.hero_size),              # subgrid: 0-4
+            np.zeros(1),                                            # exploration_count: 0-1
+            np.zeros(self.grid_size * self.grid_size)               # explored: 0-1
+        ])
+
+        high = np.concatenate([
+            np.full(self.hero_size * self.hero_size, 4),            # subgrid: 0-4
+            np.ones(1),                                             # exploration_count: 0-1
+            np.ones(self.grid_size * self.grid_size)                # explored: 0-1
+        ])
+
         self.observation_space = spaces.Box(
-            low=0, high=3,
-            shape=(self.hero_size, self.hero_size),
-            dtype=np.uint8
+            low=low, high=high, dtype=np.float32
         )
+
+        #note: the subgrid and explored values should be be integer but during sampling float32 values can be generated
+        #a workaround for this can be to use space dict but then sb3 can cause issues
+
+        # self.observation_space = spaces.Box(
+        #     low=0,
+        #     high=4,  # or 1 for explored; adjust as needed
+        #     shape=(self.hero_size * self.hero_size + 1 + self.grid_size * self.grid_size, ),
+        #     dtype=np.float32  # Use float32 for everything for simplicity
+        # )
 
         self.grid_matrix = None
         self.coordinates = None
@@ -91,6 +112,10 @@ class GridWorldEnv(gym.Env):
         self.episode_steps = 0
         self.reward = 0
         self.max_episode_steps = 1000
+        # coefficient for exploration bonus (equal in magnitude to your time penalty)
+        self.exploration_bonus = 0.1  
+        # flag to stop exploration bonus once the goal enters the subgrid 
+        self.goal_seen = False
         self.goal_reached = False
         self.explored_tiles = set() # Set to track explored tiles
 
@@ -104,14 +129,19 @@ class GridWorldEnv(gym.Env):
         self.episode_steps = 0
         self.reward = 0
         self.goal_reached = False
+        self.goal_seen = False
+        
         self.grid_matrix = create_grid_matrix(self.grid_size)
-        self.explored = np.zeros((self.grid_size, self.grid_size), dtype=int)
+        #this is to record how much the hero has explored(seen) in the total grid
+        self.explored = np.zeros((self.grid_size, self.grid_size), dtype=int) #kinda redundant tbh as set is also being used, only purpose is for observation for model and viz
         self.explored_tiles = set()
+        ##
+        
         self.coordinates = {
-            "guards": [],
             "heroes": [],
             "obstacles": [],
-            "goal": []
+            "goal": [],
+            "guards": []
         }
 
         # Place heroes
@@ -154,7 +184,7 @@ class GridWorldEnv(gym.Env):
                     self.coordinates["obstacles"].append(pos)
                     break
 
-        self.grid_matrix = update_grid_matrix(self.grid_matrix, self.coordinates)
+        self.grid_matrix = update_grid_matrix(self.grid_matrix, self.coordinates) #updatng the matrix with the generated coordinates
 
         if self.render_mode == "human" and not self.is_initialized:
             self._init_visualization()
@@ -167,16 +197,26 @@ class GridWorldEnv(gym.Env):
         self.episode_steps += 1
         self.reward += -0.1  # Time penalty for each timestep
         done = False
-        info = {}
+        info = {} #just part of the gym env, no use to me personally
 
         # Move main hero (assuming single hero for action space)
         old_pos = self.coordinates["heroes"][0]
         new_pos = self._move_agent(old_pos, action)
+        
+        prev_count = len(self.explored_tiles)
         self._update_exploration(new_pos)
+        newly_seen = len(self.explored_tiles) - prev_count
+
+        if not self.goal_seen:
+            local = extract_subgrid(self.grid_matrix, new_pos, self.hero_size)
+            self.reward += self.exploration_bonus * newly_seen
+            if 4 in local:
+                self.goal_seen = True
+        
 
         # Check goal reached
         if new_pos == self.coordinates["goal"][0]:
-            self.reward += 100
+            self.reward += 1000
             done = True
             self.goal_reached = True
 
@@ -185,7 +225,7 @@ class GridWorldEnv(gym.Env):
 
         # Check guard detection
         if self._check_detection(new_pos):
-            self.reward -= 100
+            self.reward -= 1000
             done = True
 
         # Update grid state
@@ -323,11 +363,19 @@ class GridWorldEnv(gym.Env):
         self.coordinates["heroes"][0] = new_pos
 
     def _get_observation(self):
-        hero_pos = self.coordinates["heroes"][0]
-        subgrid = extract_subgrid(self.grid_matrix, hero_pos, self.hero_size)
-        exploration_count = len(self.explored_tiles) / (self.grid_size ** 2) # Normalize exploration count to [0, 1] 
+        # hero_pos = self.coordinates["heroes"][0]
+        # subgrid = extract_subgrid(self.grid_matrix, hero_pos, self.hero_size)
+        # exploration_count = len(self.explored_tiles) / (self.grid_size ** 2) # Normalize exploration count to [0, 1] 
 
-        return [subgrid,np.array([exploration_count], dtype=np.float32), self.explored] #can modify this to include more information if needed
+        # return [subgrid,np.array([exploration_count], dtype=np.float32), self.explored] #can modify this to include more information if needed (not using this as sb3 needs numpy arrays)
+        
+        #repetition due to change in numpy array
+        hero_pos = self.coordinates["heroes"][0]
+        subgrid = extract_subgrid(self.grid_matrix, hero_pos, self.hero_size).astype(np.float32).flatten()
+        exploration_count = np.array([len(self.explored_tiles) / (self.grid_size ** 2)], dtype=np.float32)
+        explored = self.explored.astype(np.float32).flatten()
+        obs = np.concatenate([subgrid, exploration_count, explored])
+        return obs
 
     def _move_guards(self):
         # for idx in range(len(self.coordinates["guards"])):
@@ -354,6 +402,7 @@ if __name__ == "__main__":
         # env.render #not required for vizualization now, only the render_mode parameter dictates the view
         time.sleep(0.1)
         if done:
-            # print(reward, obs[2])
+            print(reward, obs[2])
             obs = env.reset()
+    # print(env.observation_space.sample())
     env.close()
