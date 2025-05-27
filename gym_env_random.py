@@ -1,8 +1,8 @@
 ###still need to understand the plotting and dynamic update
 
 import numpy as np
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import time
@@ -81,15 +81,15 @@ class GridWorldEnv(gym.Env):
         self.action_space = spaces.Discrete(4)  # 0:up, 1:right, 2:down, 3:left
 
         low = np.concatenate([
-            np.zeros(self.hero_size * self.hero_size),              # subgrid: 0-4
-            np.zeros(1),                                            # exploration_count: 0-1
-            np.zeros(self.grid_size * self.grid_size)               # explored: 0-1
+            np.zeros(self.hero_size * self.hero_size, dtype=np.float32),              # subgrid: 0-4
+            np.zeros(1, dtype=np.float32),                                            # exploration_count: 0-1
+            np.zeros(self.grid_size * self.grid_size, dtype=np.float32)               # explored: 0-1
         ])
 
         high = np.concatenate([
-            np.full(self.hero_size * self.hero_size, 4),            # subgrid: 0-4
-            np.ones(1),                                             # exploration_count: 0-1
-            np.ones(self.grid_size * self.grid_size)                # explored: 0-1
+            np.full(self.hero_size * self.hero_size, 4, dtype=np.float32),            # subgrid: 0-4
+            np.ones(1, dtype=np.float32),                                             # exploration_count: 0-1
+            np.ones(self.grid_size * self.grid_size, dtype=np.float32)                # explored: 0-1
         ])
 
         self.observation_space = spaces.Box(
@@ -110,7 +110,6 @@ class GridWorldEnv(gym.Env):
         self.coordinates = None
         self.explored = None #2-D array to track explored tiles
         self.episode_steps = 0
-        self.reward = 0
         self.max_episode_steps = 1000
         # coefficient for exploration bonus (equal in magnitude to your time penalty)
         self.exploration_bonus = 0.1  
@@ -127,7 +126,6 @@ class GridWorldEnv(gym.Env):
 
     def reset(self, *, seed=None, options=None):
         self.episode_steps = 0
-        self.reward = 0
         self.goal_reached = False
         self.goal_seen = False
         
@@ -191,11 +189,14 @@ class GridWorldEnv(gym.Env):
         elif self.render_mode == "human":
             self._update_all_views()
 
-        return self._get_observation()
+        obs= self._get_observation()
+        info={}
+        return obs, info
 
     def step(self, action):
+        step_reward = 0 # safety reset to 0 per step
         self.episode_steps += 1
-        self.reward += -0.1  # Time penalty for each timestep
+        step_reward = -0.1  # Time penalty for each timestep
         done = False
         info = {} #just part of the gym env, no use to me personally
 
@@ -209,32 +210,36 @@ class GridWorldEnv(gym.Env):
 
         if not self.goal_seen:
             local = extract_subgrid(self.grid_matrix, new_pos, self.hero_size)
-            self.reward += self.exploration_bonus * newly_seen
+            step_reward += self.exploration_bonus * newly_seen
             if 4 in local:
                 self.goal_seen = True
         
-
-        # Check goal reached
+        #Terminal / reward events
+        terminated = False
+        # goal reached
         if new_pos == self.coordinates["goal"][0]:
-            self.reward += 1000
-            done = True
+            step_reward += 1000
+            terminated = True
             self.goal_reached = True
 
-        # Move guards
+        # move guards, then check detection
         self._move_guards()
-
-        # Check guard detection
         if self._check_detection(new_pos):
-            self.reward -= 1000
-            done = True
+            step_reward -= 1000
+            terminated = True
 
-        # Update grid state
+        # 6) Update grid and render if needed
         self._update_grid_state(old_pos, new_pos)
-
         if self.render_mode == "human":
             self._update_all_views()
 
-        return self._get_observation(), self.reward, done, info
+        # 7) Check for time-limit truncation
+        truncated = self.episode_steps >= self.max_episode_steps
+
+        # 8) Return exactly what Gymnasium expects
+        obs = self._get_observation()
+        info = {}   # or fill in diagnostics if you like
+        return obs, step_reward, terminated, truncated, info
 
     def render(self):
         if self.render_mode == "human":
@@ -398,7 +403,7 @@ if __name__ == "__main__":
     obs = env.reset()
     for _ in range(100):
         action = env.action_space.sample()
-        obs, reward, done, info = env.step(action)
+        obs, reward, done, info = env.step(action) #reward should be step reward instead of the whole ep reward
         # env.render #not required for vizualization now, only the render_mode parameter dictates the view
         time.sleep(0.1)
         if done:
